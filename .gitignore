@@ -1,0 +1,38 @@
+### ===== Backend (Spring Boot / Maven) =====
+target/
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+HELP.md
+
+### ===== Maven Wrapper =====
+.mvn/wrapper/maven-wrapper.jar
+
+### ===== Frontend (React - CRA) =====
+frontend/node_modules/
+frontend/build/
+
+### ===== IDEs =====
+
+# IntelliJ IDEA
+.idea
+*.iws
+*.iml
+*.ipr
+
+# Eclipse / STS
+.metadata/
+.classpath
+.project
+.settings
+.springBeans
+.sts4-cache
+.apt_generated
+.factorypath
+
+# VS Code
+.vscode/
+
+### ===== OS =====
+.DS_Store
+Thumbs.db
