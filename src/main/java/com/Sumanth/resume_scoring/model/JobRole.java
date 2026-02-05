@@ -25,10 +25,25 @@ public class JobRole {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @OneToMany(mappedBy = "jobRole", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    // SaaS Feature: Allows recruiters to pause applications without deleting the role
+    @Column(name = "is_active")
+    private boolean isActive = true;
+
+    // Advanced Scoring Feature: Used to penalize/boost scores based on seniority
+    @Column(name = "min_experience_years")
+    private Integer minExperienceYears;
+
+    @Column(name = "location")
+    private String location;
+
+    // SaaS Feature: Track how many people have applied to this role for UI badges
+    @Column(name = "application_count")
+    private Integer applicationCount = 0;
+
+    @OneToMany(mappedBy = "jobRole", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<RoleSkill> requiredSkills;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @PrePersist

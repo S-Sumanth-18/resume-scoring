@@ -33,11 +33,24 @@ export async function getAllRoles() {
 }
 
 /**
- * Get all candidates
+ * Get candidates with server-side pagination and role filtering
  */
-export async function getAllCandidates() {
-  const res = await fetch(`${API_BASE}/candidates`);
-  if (!res.ok) throw new Error("Failed to fetch candidates");
+export async function getAllCandidates(page = 0, roleId = "") {
+  const url = roleId 
+    ? `${API_BASE}/candidates?page=${page}&roleId=${roleId}`
+    : `${API_BASE}/candidates?page=${page}`;
+    
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch talent pool");
+  return res.json();
+}
+
+/**
+ * Search candidates by name or email (Matches backend @RequestParam)
+ */
+export async function searchCandidates(query, page = 0) {
+  const res = await fetch(`${API_BASE}/candidates/search?query=${query}&page=${page}`);
+  if (!res.ok) throw new Error("Search operation failed");
   return res.json();
 }
 
@@ -46,16 +59,7 @@ export async function getAllCandidates() {
  */
 export async function getCandidateById(id) {
   const res = await fetch(`${API_BASE}/candidates/${id}`);
-  if (!res.ok) throw new Error("Failed to fetch candidate");
-  return res.json();
-}
-
-/**
- * Get candidates by role
- */
-export async function getCandidatesByRole(roleId) {
-  const res = await fetch(`${API_BASE}/candidates/role/${roleId}`);
-  if (!res.ok) throw new Error("Failed to fetch candidates for role");
+  if (!res.ok) throw new Error("Failed to fetch candidate profile");
   return res.json();
 }
 
@@ -66,26 +70,17 @@ export async function deleteCandidate(id) {
   const res = await fetch(`${API_BASE}/candidates/${id}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error("Failed to delete candidate");
+  if (!res.ok) throw new Error("Deletion failed");
   return res.json();
 }
 
 /**
- * Update candidate status
+ * Update candidate status (e.g., SHORTLISTED, REJECTED)
  */
 export async function updateCandidateStatus(id, status) {
   const res = await fetch(`${API_BASE}/candidates/${id}/status?status=${status}`, {
     method: "PUT",
   });
-  if (!res.ok) throw new Error("Failed to update status");
+  if (!res.ok) throw new Error("Failed to update candidate status");
   return res.json();
-}
-
-/**
- * Test API connection
- */
-export async function testAPI() {
-  const res = await fetch(`${API_BASE}/test`);
-  if (!res.ok) throw new Error("API test failed");
-  return res.text();
 }

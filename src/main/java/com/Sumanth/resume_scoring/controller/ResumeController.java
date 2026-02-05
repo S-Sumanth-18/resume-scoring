@@ -9,14 +9,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/resume")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "*") // Update this to your Vite dev URL in production
 public class ResumeController {
 
     @Autowired
@@ -26,51 +23,37 @@ public class ResumeController {
      * Upload and analyze resume with role-based scoring
      */
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, Object>> uploadResume(
+    public ResponseEntity<?> uploadResume(
             @RequestParam("file") MultipartFile file,
             @RequestParam("name") String name,
             @RequestParam("email") String email,
             @RequestParam(value = "phone", required = false) String phone,
             @RequestParam("roleId") Long roleId) {
 
-        Map<String, Object> response = new HashMap<>();
-
         try {
-            // Check for duplicate email
-            if (resumeService.emailExists(email)) {
-                response.put("error", "Email already exists. Candidate already registered.");
-                return ResponseEntity.badRequest().body(response);
-            }
-
-            // Validate file
+            // 1. Validation Logic
             if (file.isEmpty()) {
-                response.put("error", "File is empty");
-                return ResponseEntity.badRequest().body(response);
+                return ResponseEntity.badRequest().body(Map.of("error", "Please upload a valid file."));
+            }
+            
+            if (resumeService.emailExists(email)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("error", "A candidate with this email is already registered."));
             }
 
-            // Validate role
-            Optional<JobRole> roleOpt = resumeService.getAllJobRoles().stream()
-                    .filter(r -> r.getId().equals(roleId))
-                    .findFirst();
-
-            if (roleOpt.isEmpty()) {
-                response.put("error", "Invalid role selected");
-                return ResponseEntity.badRequest().body(response);
+            // Using a direct find instead of streaming all roles for better performance
+            JobRole role = resumeService.getRoleById(roleId);
+            if (role == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "The selected Job Role is invalid."));
             }
 
-            // Extract text from PDF
+            // 2. Processing Phase
             String resumeText = resumeService.extractTextFromPDF(file);
-
-            // Calculate advanced score
             int score = resumeService.calculateAdvancedScore(resumeText, roleId);
-
-            // Detect experience level
             String experienceLevel = resumeService.detectExperienceLevel(resumeText);
-
-            // Generate detailed feedback
             String feedback = resumeService.generateDetailedFeedback(resumeText, roleId);
 
-            // Create candidate object
+            // 3. Entity Construction
             Candidate candidate = new Candidate();
             candidate.setName(name);
             candidate.setEmail(email);
@@ -79,122 +62,69 @@ public class ResumeController {
             candidate.setResumeText(resumeText);
             candidate.setTotalScore(score);
             candidate.setFeedback(feedback);
-            candidate.setJobRole(roleOpt.get());
+            candidate.setJobRole(role);
             candidate.setExperienceLevel(experienceLevel);
             candidate.setStatus("NEW");
 
-            // Save to database (also updates rankings)
             Candidate savedCandidate = resumeService.saveCandidate(candidate);
 
-            // Prepare response
-            response.put("success", true);
-            response.put("message", "Resume analyzed successfully");
-            response.put("candidateId", savedCandidate.getId());
-            response.put("score", score);
-            response.put("experienceLevel", experienceLevel);
-            response.put("feedback", feedback);
-            response.put("rank", savedCandidate.getRankInRole());
-
-            return ResponseEntity.ok(response);
+            // 4. Structured Response for React Frontend
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "success", true,
+                "candidateId", savedCandidate.getId(),
+                "score", score,
+                "rank", savedCandidate.getRankInRole(),
+                "experienceLevel", experienceLevel,
+                "message", "Resume analyzed and candidate registered successfully."
+            ));
 
         } catch (Exception e) {
-            response.put("error", "Failed to process resume: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Processing failed: " + e.getMessage()));
         }
     }
 
     /**
-     * Get all job roles
-     */
-    @GetMapping("/roles")
-    public ResponseEntity<List<JobRole>> getAllRoles() {
-        List<JobRole> roles = resumeService.getAllJobRoles();
-        return ResponseEntity.ok(roles);
-    }
-
-    /**
-     * Get all candidates
+     * Get all candidates with optional filtering by role
+     * Recommended: Implement Pagination here for SaaS scalability
      */
     @GetMapping("/candidates")
-    public ResponseEntity<List<Candidate>> getAllCandidates() {
-        List<Candidate> candidates = resumeService.getAllCandidates();
-        return ResponseEntity.ok(candidates);
+    public ResponseEntity<List<Candidate>> getCandidates(@RequestParam(required = false) Long roleId) {
+        if (roleId != null) {
+            return ResponseEntity.ok(resumeService.getCandidatesByRole(roleId));
+        }
+        return ResponseEntity.ok(resumeService.getAllCandidates());
     }
 
     /**
-     * Get candidate by ID
+     * Update candidate status (e.g., Shortlisted, Rejected)
      */
-    @GetMapping("/candidates/{id}")
-    public ResponseEntity<Candidate> getCandidateById(@PathVariable Long id) {
-        Optional<Candidate> candidate = resumeService.getCandidateById(id);
-        return candidate.map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    @PatchMapping("/candidates/{id}/status")
+    public ResponseEntity<?> updateStatus(
+            @PathVariable Long id, 
+            @RequestBody Map<String, String> payload) {
+        
+        String status = payload.get("status");
+        if (status == null || status.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Status field is required."));
+        }
+
+        Candidate updated = resumeService.updateStatus(id, status);
+        return updated != null ? ResponseEntity.ok(updated) : ResponseEntity.notFound().build();
     }
 
-    /**
-     * Get candidates by role
-     */
-    @GetMapping("/candidates/role/{roleId}")
-    public ResponseEntity<List<Candidate>> getCandidatesByRole(@PathVariable Long roleId) {
-        List<Candidate> candidates = resumeService.getAllCandidates().stream()
-                .filter(c -> c.getJobRole() != null && c.getJobRole().getId().equals(roleId))
-                .toList();
-        return ResponseEntity.ok(candidates);
+    @GetMapping("/roles")
+    public ResponseEntity<List<JobRole>> getAllRoles() {
+        return ResponseEntity.ok(resumeService.getAllJobRoles());
     }
 
-    /**
-     * Delete candidate
-     */
     @DeleteMapping("/candidates/{id}")
-    public ResponseEntity<Map<String, String>> deleteCandidate(@PathVariable Long id) {
-        Map<String, String> response = new HashMap<>();
-
+    public ResponseEntity<?> deleteCandidate(@PathVariable Long id) {
         try {
-            Optional<Candidate> candidate = resumeService.getCandidateById(id);
-
-            if (candidate.isEmpty()) {
-                response.put("error", "Candidate not found");
-                return ResponseEntity.notFound().build();
-            }
-
             resumeService.deleteCandidate(id);
-            response.put("message", "Candidate deleted successfully");
-            return ResponseEntity.ok(response);
-
+            return ResponseEntity.ok(Map.of("message", "Candidate removed successfully."));
         } catch (Exception e) {
-            response.put("error", "Failed to delete candidate: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Candidate not found."));
         }
-    }
-
-    /**
-     * Update candidate status
-     */
-    @PutMapping("/candidates/{id}/status")
-    public ResponseEntity<Candidate> updateStatus(
-            @PathVariable Long id,
-            @RequestParam("status") String status) {
-
-        try {
-            Candidate updated = resumeService.updateStatus(id, status);
-
-            if (updated == null) {
-                return ResponseEntity.notFound().build();
-            }
-
-            return ResponseEntity.ok(updated);
-
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    /**
-     * Test endpoint
-     */
-    @GetMapping("/test")
-    public ResponseEntity<String> test() {
-        return ResponseEntity.ok("Resume Scoring API is running with enhanced features!");
     }
 }

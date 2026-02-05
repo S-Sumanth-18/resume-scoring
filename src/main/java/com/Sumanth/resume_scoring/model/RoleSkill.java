@@ -25,6 +25,18 @@ public class RoleSkill {
     @Column(name = "skill_name", nullable = false)
     private String skillName;
 
+    // SaaS Feature: Support synonyms (e.g. "PostgreSQL, Postgres") to increase match accuracy
+    @Column(name = "aliases")
+    private String aliases;
+
     @Column(name = "weight")
-    private Integer weight = 5; // Default weight
+    private Integer weight = 5; 
+
+    // Advanced Scoring Feature: If true, the system can flag candidates missing this skill
+    @Column(name = "is_mandatory")
+    private boolean isMandatory = false;
+
+    // UI Feature: Helps categorize skills into tabs or sections in the Vite dashboard
+    @Column(name = "category")
+    private String category; // e.g., "Languages", "Frameworks", "Cloud"
 }
