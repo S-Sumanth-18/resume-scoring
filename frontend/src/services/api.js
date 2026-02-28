@@ -1,8 +1,5 @@
-const API_BASE = `${process.env.REACT_APP_API_BASE_URL}/api/resume`;
+import axiosClient from './axiosClient';
 
-/**
- * Upload resume with role selection
- */
 export async function uploadResume(file, name, email, phone, roleId) {
   const formData = new FormData();
   formData.append("file", file);
@@ -11,81 +8,72 @@ export async function uploadResume(file, name, email, phone, roleId) {
   if (phone) formData.append("phone", phone);
   formData.append("roleId", roleId);
 
-  const res = await fetch(`${API_BASE}/upload`, {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Upload failed");
+  try {
+    const res = await axiosClient.post('/resume/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return res.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || "Upload failed");
   }
-  return res.json();
 }
 
-/**
- * Get all job roles
- */
+export async function bulkUploadResume(files, roleId) {
+  const formData = new FormData();
+  Array.from(files).forEach(file => formData.append("files", file));
+  formData.append("roleId", roleId);
+
+  try {
+    const res = await axiosClient.post('/resume/bulk-upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return res.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || "Bulk upload failed");
+  }
+}
+
 export async function getAllRoles() {
-  const res = await fetch(`${API_BASE}/roles`);
-  if (!res.ok) throw new Error("Failed to fetch roles");
-  return res.json();
+  const res = await axiosClient.get('/roles');
+  return res.data;
 }
 
-/**
- * Get all candidates
- */
-export async function getAllCandidates() {
-  const res = await fetch(`${API_BASE}/candidates`);
-  if (!res.ok) throw new Error("Failed to fetch candidates");
-  return res.json();
+export async function createRole(roleData) {
+  const res = await axiosClient.post('/roles', roleData);
+  return res.data;
 }
 
-/**
- * Get candidate by ID
- */
+export async function searchCandidates(keyword, roleId = "", status = "", minScore = "") {
+  let url = '/resume/candidates?';
+  if (keyword) url += `keyword=${keyword}&`;
+  if (roleId) url += `roleId=${roleId}&`;
+  if (status) url += `status=${status}&`;
+  if (minScore) url += `minScore=${minScore}&`;
+
+  const res = await axiosClient.get(url);
+  return res.data;
+}
+
+export async function getAllCandidates(page = 0, roleId = "") {
+  return searchCandidates("", roleId);
+}
+
 export async function getCandidateById(id) {
-  const res = await fetch(`${API_BASE}/candidates/${id}`);
-  if (!res.ok) throw new Error("Failed to fetch candidate");
-  return res.json();
+  const res = await axiosClient.get(`/resume/candidates/${id}`);
+  return res.data;
 }
 
-/**
- * Get candidates by role
- */
-export async function getCandidatesByRole(roleId) {
-  const res = await fetch(`${API_BASE}/candidates/role/${roleId}`);
-  if (!res.ok) throw new Error("Failed to fetch candidates for role");
-  return res.json();
-}
-
-/**
- * Delete candidate
- */
 export async function deleteCandidate(id) {
-  const res = await fetch(`${API_BASE}/candidates/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) throw new Error("Failed to delete candidate");
-  return res.json();
+  const res = await axiosClient.delete(`/resume/candidates/${id}`);
+  return res.data;
 }
 
-/**
- * Update candidate status
- */
 export async function updateCandidateStatus(id, status) {
-  const res = await fetch(`${API_BASE}/candidates/${id}/status?status=${status}`, {
-    method: "PUT",
-  });
-  if (!res.ok) throw new Error("Failed to update status");
-  return res.json();
+  const res = await axiosClient.patch(`/resume/candidates/${id}/status`, { status });
+  return res.data;
 }
 
-/**
- * Test API connection
- */
-export async function testAPI() {
-  const res = await fetch(`${API_BASE}/test`);
-  if (!res.ok) throw new Error("API test failed");
-  return res.text();
+export async function reanalyzeCandidate(id) {
+  const res = await axiosClient.post(`/resume/reanalyze/${id}`);
+  return res.data;
 }
